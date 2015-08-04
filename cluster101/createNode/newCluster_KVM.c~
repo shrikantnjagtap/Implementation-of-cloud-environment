@@ -1,0 +1,130 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <libvirt/libvirt.h>
+#include <libvirt/virterror.h>
+#include <pthread.h>
+#include <string.h>
+
+int createDisk(char *dir/* new cluster dir*/,int i,int size);
+int query();
+
+extern char clusterHomeDir[256];
+
+extern int user_id;
+extern int clust_id;
+extern int node_id;
+
+extern int memory;
+extern int vcpu;
+extern int disk;
+extern int up_bandwidth;
+extern int down_bandwidth;
+extern char node_name[128];
+
+int newNode(char *dir,int node_no)
+{
+	//printf("\n%s %d",dir,node_no);
+	/*   query the data base for the ram and disk data */
+
+	int r=0;
+	r=query(); // r will return code 0 means success
+	
+	if(r!=0) //error
+	{
+		//do something to let the caller know that there is an error;
+		exit(2);
+	}
+	//printf("\n%d %d %d %d %d",memory,vcpu,disk,up_bandwidth,down_bandwidth);
+	
+	
+	/*	-------------------  xml creation         ---------------------------------*/	
+	
+	char xml[1024];
+
+	
+		
+	int total=0,n=0;
+	
+		total=0;n=0;
+		
+		n=sprintf(xml+total,"<domain type='kvm'>");
+		total=total+n;
+	
+		n=sprintf(xml+total,"<name>%s</name>",node_name);
+		total=total+n;
+	
+		n=sprintf(xml+total,"<vcpu>%d</vcpu>",vcpu);
+		total=total+n;
+		n=sprintf(xml+total,"<memory unit='KiB'>%d</memory>",memory*1024);
+		total=total+n;
+		
+		n=sprintf(xml+total,"<os>");
+		total=total+n;
+	
+			n=sprintf(xml+total,"<type arch='x86_64'>hvm</type><boot dev='hd'/>");
+			total=total+n;
+		n=sprintf(xml+total,"</os>");
+		total=total+n;
+		
+		n=sprintf(xml+total,"<features><acpi/><apic/><pae/></features>"
+								"<clock offset='utc'/>"
+								"<on_poweroff>destroy</on_poweroff>"
+								"<on_reboot>restart</on_reboot>"
+								"<on_crash>restart</on_crash>");
+		total=total+n;
+
+		
+		n=sprintf(xml+total,"<devices>"
+									"<emulator>/usr/bin/kvm</emulator>");
+		total=total+n;
+		
+				n=sprintf(xml+total,"<disk type='file'>");
+				total=total+n;
+					n=sprintf(xml+total,"<driver name='qemu' type='raw'/>"
+								"<source file='%s/%d%s'/>",dir,node_id,".img"); /* cust_id/clust_no/node_no.img*/
+					total=total+n;
+					n=sprintf(xml+total,"<target dev='hda'/>");
+					total=total+n;
+				
+				
+					createDisk(dir,node_no,disk); //------------------------------------------//
+					
+				n=sprintf(xml+total,"</disk>");
+				total=total+n;
+				
+				n=sprintf(xml+total,"<interface type='bridge'>");
+				total=total+n;
+					//n=sprintf(xml+total,"<mac address='DD:BE:21:22:11:%d%d'/>",clust_id,node_id);
+					//total=total+n;
+					n=sprintf(xml+total,"<source bridge='br%d_%d'/>" //bridge is built on the basis of cust_id and clust_no
+							"<bandwidth><inbound average='%d' peak='5000' burst='5120' />"
+							"<outbound average='%d' peak='5000' burst='5120' /></bandwidth>",user_id,clust_id,up_bandwidth,down_bandwidth);
+					total=total+n;
+					n=sprintf(xml+total,"</interface>");
+					total=total+n;
+				int port=2000+(256*user_id)+(16*clust_id)+node_id;
+				n=sprintf(xml+total,"<graphics type='vnc' port='%d' passwd='redhat'><listen type='address' address='0.0.0.0' /></graphics>");
+				total=total+n;
+		n=sprintf(xml+total,"</devices>");
+		total=total+n;
+		n=sprintf(xml+total,"</domain>");
+		total=total+n;
+		
+		//printf("\n%s\n",xml[i]);
+		/*    save the xml  */
+		FILE *fx;
+		char fxml[512];
+		memset(fxml,0,512);
+		sprintf(fxml,"%s/%d.xml",dir,node_id);
+		fx=fopen(fxml,"w");
+		if(fx==NULL)
+		{
+			perror("\nError in creating xml config");
+			exit(3);
+		}
+		fprintf(fx,"%s",xml);
+		fclose(fx);
+		
+	return 0;
+}
+

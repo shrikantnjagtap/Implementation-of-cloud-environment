@@ -1,0 +1,2 @@
+#!/bin/bash
+mysql -uroot -predhat test -s -r -N -e "select group_concat(concat('node',node_id) separator ' ') from nodes where user_id = $1 and cluster_id = $2 and status='Running' group by cluster_id"
